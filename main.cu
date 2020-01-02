@@ -84,7 +84,17 @@ int main()
     //launch the kernel
     dim3 blkDim (BLOCKSIZE, BLOCKSIZE, 1);
     dim3 grdDim ((width + BLOCKSIZE-1)/BLOCKSIZE, (height + BLOCKSIZE-1)/BLOCKSIZE, 1);
+    // create and start timer
+    cudaEventCreate(&start);
+    cudaEventRecord(start, NULL); 
+
     rgb2gray<<<grdDim, blkDim>>>(d_src, d_dst, width, height);
+
+    cudaEventCreate(&stop);
+    cudaEventRecord(stop, NULL);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&msecTotal, start, stop);
+    cout << "RGB2Gray time GPU:" << msecTotal << endl;
 
     int* hist = new int[256];
     int* histGPU = new int[256];
