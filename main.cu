@@ -71,7 +71,7 @@ int main()
     std::cout <<"CPU processing time: " << cpu_time << " ms" <<std::endl;
 
     
-    std::cout << "Start GPU processing" << std::endl;
+    //std::cout << "Start GPU processing" << std::endl;
     // create and start timer
     cudaEventCreate(&start);
     cudaEventRecord(start, NULL); 
@@ -82,8 +82,8 @@ int main()
     cudaMemcpy(d_src, h_src, size, cudaMemcpyHostToDevice);
 
     //launch the kernel
-    dim3 blkDim (BLOCKSIZE, BLOCKSIZE, 1);
-    dim3 grdDim ((width + BLOCKSIZE-1)/BLOCKSIZE, (height + BLOCKSIZE-1)/BLOCKSIZE, 1);
+    dim3 blkDim (BLOCKSIZE, 1,1);
+    dim3 grdDim (ceil(size2/BLOCKSIZE), 1, 1);
     // create and start timer
     cudaEventCreate(&start);
     cudaEventRecord(start, NULL); 
@@ -94,7 +94,7 @@ int main()
     cudaEventRecord(stop, NULL);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&msecTotal, start, stop);
-    cout << "RGB2Gray time GPU:" << msecTotal << endl;
+    cout << "RGB2Gray time GPU:" << msecTotal << "ms" << endl;
 
     int* hist = new int[256];
     int* histGPU = new int[256];
@@ -123,7 +123,7 @@ int main()
             break;
         }
     }
-    cout << "min " << min << " max " << max << endl;
+    //cout << "min " << min << " max " << max << endl;
     cudaMalloc((void**)&GPU_contrast, width*height*sizeof(unsigned char));
     ContrastEnhancement<<<grdDim,blkDim>>>(d_dst,GPU_contrast,width,height,min,max);
 
@@ -131,7 +131,7 @@ int main()
     cout << +h_contrast[(height-1)*width]<< " " << +h_contrast[(height-1)*width+1] << " " << +h_contrast[(height-2)*width] << " "  << +h_contrast[(height-2)*width+1] << endl;
     cudaMalloc(&GPU_smoothing, width*height*sizeof(unsigned char));
     Smoothing<<<grdDim,blkDim>>>(GPU_contrast,d_dst, width, height);
-    cout << "Managed" << endl;
+    //cout << "Managed" << endl;
     
     // add other three kernels here
     // clock starts -> copy data to gpu -> kernel1 -> kernel2->kernel3->kernel 4 ->copy result to cpu -> clock stops
@@ -147,7 +147,7 @@ int main()
     cudaEventRecord(stop, NULL);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&msecTotal, start, stop);
-    float gpu_time = msecTotal;
+    //float gpu_time = msecTotal;
     
 
     
@@ -164,7 +164,7 @@ int main()
 
     cudaDeviceReset();
     std::cout << "diff cpu and gpu " << res <<std::endl; // do not change this
-    std::cout <<"CPU processing time: " << gpu_time << " ms" <<std::endl; // do not change this
+    //std::cout <<"CPU processing time: " << gpu_time << " ms" <<std::endl; // do not change this
     //you need to save your final output, we need to measure the correctness of your program
     //read test.cpp to learn how to save a image
     //smoothing_gpu.save("smoothing_gpu.jpg"); 

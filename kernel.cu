@@ -5,23 +5,23 @@
 __global__ void rgb2gray(unsigned char * d_src, unsigned char * d_dst, int width, int height)
 {
     int pos_x = blockIdx.x * blockDim.x + threadIdx.x;
-    int pos_y = blockIdx.y * blockDim.y + threadIdx.y;
+    //int pos_y = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if (pos_x >= width || pos_y >= height)
+    /*if (pos_x >= width || pos_y >= height)
         return;
-
+*/
     /*
      * CImg RGB channels are split, not interleaved.
      * (http://cimg.eu/reference/group__cimg__storage.html)
      */
-    unsigned char r = d_src[pos_y * width + pos_x];
-    unsigned char g = d_src[(height + pos_y ) * width + pos_x];
-    unsigned char b = d_src[(height * 2 + pos_y) * width + pos_x];
+    unsigned char r = d_src[pos_x];
+    unsigned char g = d_src[height* width + pos_x];
+    unsigned char b = d_src[height * 2 * width + pos_x];
 
     unsigned int _gray = (unsigned int)((float)(r + g + b) / 3.0f + 0.5);
     unsigned char gray = _gray > 255 ? 255 : _gray;
 
-    d_dst[pos_y * width + pos_x] = gray;
+    d_dst[pos_x] = gray;
 }
 
 __global__ void histgram(int* hist, unsigned char * gray, int width, int height){
