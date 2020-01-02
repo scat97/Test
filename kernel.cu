@@ -24,12 +24,12 @@ __global__ void rgb2gray(unsigned char * d_src, unsigned char * d_dst, int width
 
 __global__ void histgram(int* hist, unsigned char * gray, int width, int height){
     int pos_x = blockIdx.x*blockDim.x+threadIdx.x;
-    int pos_y = blockIdx.y*blockDim.y+threadIdx.y;
+    //int pos_y = blockIdx.y*blockDim.y+threadIdx.y;
 /*
     if (pos_x >= width || pos_y >= height)
       return;
   */  
-    unsigned char loc = gray[pos_y*width+pos_x];
+    unsigned char loc = gray[pos_x];
     atomicAdd(&hist[loc], 1);
 
 }
