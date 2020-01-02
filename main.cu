@@ -109,14 +109,14 @@ int main()
     int* histGPU = new int[256];
     // create and start timer
 ///////////////////////////////////////////////////////
-    dim3 blkDim2 (BLOCKSIZE2, BLOCKSIZE2,1);
-    dim3 grdDim2 ((width+BLOCKSIZE2-1)/BLOCKSIZE2, (height+BLOCKSIZE2-1)/BLOCKSIZE2, 1);
+    //dim3 blkDim2 (BLOCKSIZE2, BLOCKSIZE2,1);
+    //dim3 grdDim2 ((width+BLOCKSIZE2-1)/BLOCKSIZE2, (height+BLOCKSIZE2-1)/BLOCKSIZE2, 1);
     cudaEventCreate(&start);
     cudaEventRecord(start, NULL); 
 
     cudaMalloc(&histGPU, 256*sizeof(int));
     cudaMemset(histGPU, 0, 256*sizeof(int));
-    histgram<<<grdDim2,blkDim2>>>(histGPU, d_dst, width , height);
+    histgram<<<grdDim,blkDim>>>(histGPU, d_dst, width , height);
 
     cudaEventCreate(&stop);
     cudaEventRecord(stop, NULL);
