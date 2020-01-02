@@ -23,15 +23,30 @@ __global__ void rgb2gray(unsigned char * d_src, unsigned char * d_dst, int width
 }
 
 __global__ void histgram(int* hist, unsigned char * gray, int width, int height){
+    __shared__ int histshared[256];
+    if(threadIdx.x < 256){
+    histshared[threadIdx.x] = 0;
+    }
+    __syncthreads();
     int pos_x = blockIdx.x*blockDim.x+threadIdx.x;
-    //int pos_y = blockIdx.y*blockDim.y+threadIdx.y;
-/*
-    if (pos_x >= width || pos_y >= height)
-      return;
-  */  
     unsigned char loc = gray[pos_x];
-    atomicAdd(&hist[loc], 1);
+    atomicAdd(&histshared[loc], 1);
+    __syncthreads();
+    if (threadIdx.x >255) return;
+    if(histshared[threadIdx.x] == 0) return;
+    
+    atomicAdd(&hist[threadIdx.x+(blockIdx.x&height)*256], histshared[threadIdx.x]);
+    
 
+
+}
+__global__ void histgram_summation(int* hist, int stride){
+  //int pos_x = blockIdx.x*blockDim.x+threadIdx.x;
+  //int pos_y = blockIdx.y*blockDim.y+threadIdx.y;
+  int tid = threadIdx.x;
+  int bid = blockIdx.x;
+
+  hist[bid*256+tid]+=hist[(stride+bid)*256+tid];
 }
 
 __global__ void ContrastEnhancement(unsigned char*gray,unsigned char*res,int width, int height, int min, int max){
@@ -87,6 +102,7 @@ __global__ void Smoothing(unsigned char*gray,unsigned char*res,int width, int he
     res[width*pos_y+pos_x] = val;}
 }
 
+////////////////////////////////////////// CPU functions
 void rgb2gray_cpu(unsigned char * d_src, unsigned char * d_dst, int width, int height){
 
   for (int i = 0; i < width ; i++){
@@ -100,4 +116,13 @@ void rgb2gray_cpu(unsigned char * d_src, unsigned char * d_dst, int width, int h
     }
   }
 
+}
+
+void histgram_cpu(int* hist, unsigned char*gray,int width, int height){
+  int size = width*height;
+
+  for (int i=0;i<size;i++){
+      unsigned char gray_val=gray[i];
+      hist[gray_val]++;
+  }
 }

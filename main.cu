@@ -4,6 +4,7 @@
 #include <iostream>
 #include "kernel.h"
 #include "kernelcpu.h"
+//#include "helper_cuda.h"
 #define BLOCKSIZE 128
 #define BLOCKSIZE2 32
 using namespace std;
@@ -17,6 +18,15 @@ int compute_diff(unsigned char * res_cpu, unsigned char * res_gpu, unsigned long
   }
   return res;
 }
+
+int compute_diff_hist(int * res_cpu, int * res_gpu, unsigned long size){
+    int res = 0;
+    for(int i = 0;i < size; i++){
+      res += res_cpu[i] - res_gpu[i];
+    }
+    return res;
+  }
+
 
 int main()
 {
@@ -57,11 +67,18 @@ int main()
 
     std::cout << "Start CPU processing" << std::endl;
     // create and start timer
+
     cudaEventCreate(&start);
     cudaEventRecord(start, NULL); 
-    // hisgram cpu
     unsigned char *cpu_ref = new unsigned char [width*height];
-    rgb2gray_cpu(h_src,cpu_ref,width,height);
+    int* cpu_ref_hist = new int[256];
+    memset(cpu_ref_hist, 0, sizeof(int)*256);
+
+    rgb2gray_cpu(h_src, cpu_ref, width, height);
+
+    // hisgram cpu
+    
+    histgram_cpu(cpu_ref_hist, cpu_ref, width,  height);
     // stop and destroy timer
     cudaEventCreate(&stop);
     cudaEventRecord(stop, NULL);
@@ -103,31 +120,70 @@ int main()
 
     cudaDeviceSynchronize();
     cudaMemcpy(h_dst, d_dst, width*height, cudaMemcpyDeviceToHost);
+    
 //////////////////////////////////////////////////
+    //for(int AmountOfHists = 16; AmountOfHists <= 16; AmountOfHists+= 4){
+        int power = 3;
+        int AmountOfHists = pow(2,power);
+        int* hist = new int[256];
+        int* histGPU = new int[256*AmountOfHists];
+        // create and start timer
+    ///////////////////////////////////////////////////////
+        dim3 blkDim2 (512, 1,1);
+        dim3 grdDim2 (ceil(size2/512),1, 1);
 
-    int* hist = new int[256];
-    int* histGPU = new int[256];
-    // create and start timer
-///////////////////////////////////////////////////////
-    //dim3 blkDim2 (BLOCKSIZE2, BLOCKSIZE2,1);
-    //dim3 grdDim2 ((width+BLOCKSIZE2-1)/BLOCKSIZE2, (height+BLOCKSIZE2-1)/BLOCKSIZE2, 1);
-    cudaEventCreate(&start);
-    cudaEventRecord(start, NULL); 
 
-    cudaMalloc(&histGPU, 256*sizeof(int));
-    cudaMemset(histGPU, 0, 256*sizeof(int));
-    histgram<<<grdDim,blkDim>>>(histGPU, d_dst, width , height);
+        bool temp3 = cudaMalloc(&histGPU, 256*sizeof(int)*AmountOfHists) == cudaSuccess;
+        bool temp2 = cudaMemset(histGPU, 0, 256*sizeof(int)*AmountOfHists) == cudaSuccess;
+        cout << "malloc is " << temp3 << " memset is " << temp2 <<endl;
+        int mask = pow(2,(power))-1;
+        cudaEventCreate(&start);
+        cudaEventRecord(start, NULL); 
+        histgram<<<grdDim2,blkDim2>>>(histGPU, d_dst, width , mask);
+        cudaEventCreate(&stop);
+        cudaEventRecord(stop, NULL);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&msecTotal2, start, stop);
+        cout << "Histogram time GPU:" << msecTotal2 << "ms" << " for histnumber " << AmountOfHists << endl;
 
-    cudaEventCreate(&stop);
-    cudaEventRecord(stop, NULL);
-    cudaEventSynchronize(stop);
-    cudaEventElapsedTime(&msecTotal2, start, stop);
-    cout << "Histogram time GPU:" << msecTotal2 << "ms" << endl;
+////////////////////////////////////////////////////////////////
+        cudaEventCreate(&start);
+        cudaEventRecord(start, NULL); 
+        dim3 blkDim3 (256,1,1);
+        for (int stride = AmountOfHists/2; stride>0; stride>>=1){
+            dim3 grdDim3 (stride,1,1);
+            histgram_summation<<<grdDim3, blkDim3>>>(histGPU, stride);
+            cudaDeviceSynchronize();
+        }
+        cudaEventCreate(&stop);
+        cudaEventRecord(stop, NULL);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&msecTotal2, start, stop);
+        cout << "Histogram summation time GPU:" << msecTotal2 << "ms" << " for histnumber " << AmountOfHists << endl;
 
-    cudaMemcpy(hist, histGPU, 256*sizeof(int),cudaMemcpyDeviceToHost);
+        cudaMemcpy(hist, histGPU, 256*sizeof(int),cudaMemcpyDeviceToHost);
+        cout << "CPU: " << cpu_ref_hist[0] << " GPU " << hist[0] << endl;
+        /*for (int i = 0; i < 256; i++){
+            for (int j = 1; j < 16; j++){
+                hist[i] += hist[i+j*256];
+            }
+        }*/
+        cout << "CPU: " << cpu_ref_hist[0] << " GPU " << hist[0] << endl;
+        cudaEventCreate(&stop);
+        cudaEventRecord(stop, NULL);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&msecTotal2, start, stop);
+        int diff_hist;
+        diff_hist = compute_diff_hist(hist, cpu_ref_hist, 256);
+        if(diff_hist == 0){
+            cout << "Histogram time GPU:" << msecTotal2 << "ms" << " for histnumber " << AmountOfHists << endl;
+        }
+
+        cudaFree(histGPU);
+    //}
     ///////////////////////////////////////////////////////
 
-
+    //int* hist = new int[256]();
     int min,max;
     int temp = 0;
 
@@ -180,7 +236,7 @@ int main()
 
     cudaFree(GPU_contrast);
     cudaFree(GPU_smoothing);
-    cudaFree(histGPU);
+    //cudaFree(histGPU);
     cudaFree(d_src);
 
 
