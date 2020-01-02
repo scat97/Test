@@ -4,7 +4,7 @@
 #include <iostream>
 #include "kernel.h"
 #include "kernelcpu.h"
-#define BLOCKSIZE 32
+#define BLOCKSIZE 128
 using namespace std;
 using namespace cimg_library;
 
@@ -81,6 +81,9 @@ int main()
 
     cudaMemcpy(d_src, h_src, size, cudaMemcpyHostToDevice);
 
+////////////////////////////////////////////////
+/// RGB to gray ///
+
     //launch the kernel
     dim3 blkDim (BLOCKSIZE, 1,1);
     dim3 grdDim (ceil(size2/BLOCKSIZE), 1, 1);
@@ -95,6 +98,10 @@ int main()
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&msecTotal, start, stop);
     cout << "RGB2Gray time GPU:" << msecTotal << "ms" << endl;
+
+    cudaDeviceSynchronize();
+    cudaMemcpy(h_dst, d_dst, width*height, cudaMemcpyDeviceToHost);
+//////////////////////////////////////////////////
 
     int* hist = new int[256];
     int* histGPU = new int[256];
@@ -138,7 +145,7 @@ int main()
 
     //wait until kernel finishes
     cudaDeviceSynchronize();
-    cudaMemcpy(h_dst, d_dst, width*height, cudaMemcpyDeviceToHost);
+    //cudaMemcpy(h_dst, d_dst, width*height, cudaMemcpyDeviceToHost);
     
     //copy back the result to CPU
     //cudaMemcpy(h_dst, d_dst, width*height, cudaMemcpyDeviceToHost);
@@ -181,6 +188,6 @@ int main()
     contrast.save("Con_GPU.jpg");
     //&h_dst = h_src;
     dst.save("file.jpg");
-    cout << +h_dst[height*width]<<endl;
+    //cout << +h_dst[height*width]<<endl;
     return 0;
 }

@@ -18,10 +18,8 @@ __global__ void rgb2gray(unsigned char * d_src, unsigned char * d_dst, int width
     unsigned char g = d_src[height* width + pos_x];
     unsigned char b = d_src[height * 2 * width + pos_x];
 
-    unsigned int _gray = (unsigned int)((float)(r + g + b) / 3.0f + 0.5);
-    unsigned char gray = _gray > 255 ? 255 : _gray;
-
-    d_dst[pos_x] = gray;
+    d_dst[pos_x] = (unsigned char)((float)(r + g + b) / 3.0f + 0.5);
+    //unsigned char gray = _gray > 255 ? 255 : _gray;
 }
 
 __global__ void histgram(int* hist, unsigned char * gray, int width, int height){
