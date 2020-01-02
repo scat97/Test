@@ -5,6 +5,7 @@
 #include "kernel.h"
 #include "kernelcpu.h"
 #define BLOCKSIZE 128
+#define BLOCKSIZE2 32
 using namespace std;
 using namespace cimg_library;
 
@@ -50,7 +51,7 @@ int main()
 
     cudaEvent_t start; // to record processing time
     cudaEvent_t stop;
-    float msecTotal;
+    float msecTotal,msecTotal2;
   
 
 
@@ -73,8 +74,8 @@ int main()
     
     //std::cout << "Start GPU processing" << std::endl;
     // create and start timer
-    cudaEventCreate(&start);
-    cudaEventRecord(start, NULL); 
+    //cudaEventCreate(&start);
+    //cudaEventRecord(start, NULL); 
 
     cudaMalloc((void**)&d_src, size);
     cudaMalloc((void**)&d_dst, width*height*sizeof(unsigned char));
@@ -87,6 +88,7 @@ int main()
     //launch the kernel
     dim3 blkDim (BLOCKSIZE, 1,1);
     dim3 grdDim (ceil(size2/BLOCKSIZE), 1, 1);
+    cout << (ceil(size2/BLOCKSIZE)) << " grid" << endl;
     // create and start timer
     cudaEventCreate(&start);
     cudaEventRecord(start, NULL); 
@@ -105,11 +107,27 @@ int main()
 
     int* hist = new int[256];
     int* histGPU = new int[256];
+    // create and start timer
+///////////////////////////////////////////////////////
+    dim3 blkDim2 (BLOCKSIZE2, BLOCKSIZE2,1);
+    dim3 grdDim2 ((width+BLOCKSIZE2-1)/BLOCKSIZE2, (height+BLOCKSIZE2-1)/BLOCKSIZE2, 1);
+    cudaEventCreate(&start);
+    cudaEventRecord(start, NULL); 
+
     cudaMalloc(&histGPU, 256*sizeof(int));
     cudaMemset(histGPU, 0, 256*sizeof(int));
-    histgram<<<grdDim,blkDim>>>(histGPU, d_dst, width , height);
-    cudaDeviceSynchronize();
+    histgram<<<grdDim2,blkDim2>>>(histGPU, d_dst, width , height);
+
+    cudaEventCreate(&stop);
+    cudaEventRecord(stop, NULL);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&msecTotal2, start, stop);
+    cout << "Histogram time GPU:" << msecTotal2 << "ms" << endl;
+
     cudaMemcpy(hist, histGPU, 256*sizeof(int),cudaMemcpyDeviceToHost);
+    ///////////////////////////////////////////////////////
+
+
     int min,max;
     int temp = 0;
 
