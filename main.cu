@@ -6,10 +6,15 @@
 #include "kernelcpu.h"
 //#include "helper_cuda.h"
 #define BLOCKSIZE 128
-#define BLOCKSIZE2 32
+#define BLOCKSIZE2 16
 using namespace std;
 using namespace cimg_library;
 
+
+/////////////////
+//surface<void, 2> surftest;
+
+//////////
 
 int compute_diff(unsigned char * res_cpu, unsigned char * res_gpu, unsigned long size){
   int res = 0;
@@ -37,9 +42,6 @@ int main()
     unsigned long size = src.size();
     unsigned long size2 = width*height;
 
-    //cudaDeviceProp deviceProp;
-    //cudaGetDeviceProperties(&deviceProp, dev);
-
     //create pointer to image
     unsigned char *h_src = src.data();
     
@@ -55,9 +57,12 @@ int main()
 
     unsigned char *d_src;
     unsigned char *d_dst;
+    unsigned char *d_dst_2;
+    //cudaMalloc(&d_dst_2, width*height*sizeof(unsigned int));
 
     unsigned char *GPU_contrast;
     unsigned char *GPU_smoothing;
+    unsigned char *GPU_smoothing2;
 
     cudaEvent_t start; // to record processing time
     cudaEvent_t stop;
@@ -123,60 +128,41 @@ int main()
     
 //////////////////////////////////////////////////
     //for(int AmountOfHists = 16; AmountOfHists <= 16; AmountOfHists+= 4){
-        int power = 3;
+        int power = 2;
         int AmountOfHists = pow(2,power);
         int* hist = new int[256];
         int* histGPU = new int[256*AmountOfHists];
         // create and start timer
     ///////////////////////////////////////////////////////
-        dim3 blkDim2 (512, 1,1);
-        dim3 grdDim2 (ceil(size2/512),1, 1);
+        dim3 blkDim2 (256, 1,1);
+        dim3 grdDim2 (ceil(size2/256),1, 1);
+        cudaEventCreate(&start);
+        cudaEventRecord(start, NULL); 
 
-
-        bool temp3 = cudaMalloc(&histGPU, 256*sizeof(int)*AmountOfHists) == cudaSuccess;
-        bool temp2 = cudaMemset(histGPU, 0, 256*sizeof(int)*AmountOfHists) == cudaSuccess;
-        cout << "malloc is " << temp3 << " memset is " << temp2 <<endl;
+        cudaMalloc(&histGPU, 256*sizeof(int)*AmountOfHists);
+        cudaMemset(histGPU, 0, 256*sizeof(int)*AmountOfHists);
+        //cout << "malloc is " << temp3 << " memset is " << temp2 <<endl;
         int mask = pow(2,(power))-1;
-        cudaEventCreate(&start);
-        cudaEventRecord(start, NULL); 
-        histgram<<<grdDim2,blkDim2>>>(histGPU, d_dst, width , mask);
-        cudaEventCreate(&stop);
-        cudaEventRecord(stop, NULL);
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&msecTotal2, start, stop);
-        cout << "Histogram time GPU:" << msecTotal2 << "ms" << " for histnumber " << AmountOfHists << endl;
 
-////////////////////////////////////////////////////////////////
-        cudaEventCreate(&start);
-        cudaEventRecord(start, NULL); 
+        histgram<<<grdDim2,blkDim2>>>(histGPU, d_dst, width , mask);
+
         dim3 blkDim3 (256,1,1);
-        for (int stride = AmountOfHists/2; stride>0; stride>>=1){
+        for (int stride = AmountOfHists/2; stride>0; stride>>=1){ // Interleaved reduction
             dim3 grdDim3 (stride,1,1);
             histgram_summation<<<grdDim3, blkDim3>>>(histGPU, stride);
             cudaDeviceSynchronize();
         }
-        cudaEventCreate(&stop);
-        cudaEventRecord(stop, NULL);
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&msecTotal2, start, stop);
-        cout << "Histogram summation time GPU:" << msecTotal2 << "ms" << " for histnumber " << AmountOfHists << endl;
-
+  
         cudaMemcpy(hist, histGPU, 256*sizeof(int),cudaMemcpyDeviceToHost);
-        cout << "CPU: " << cpu_ref_hist[0] << " GPU " << hist[0] << endl;
-        /*for (int i = 0; i < 256; i++){
-            for (int j = 1; j < 16; j++){
-                hist[i] += hist[i+j*256];
-            }
-        }*/
-        cout << "CPU: " << cpu_ref_hist[0] << " GPU " << hist[0] << endl;
+        
         cudaEventCreate(&stop);
         cudaEventRecord(stop, NULL);
         cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&msecTotal2, start, stop);
+        cudaEventElapsedTime(&msecTotal, start, stop);
         int diff_hist;
         diff_hist = compute_diff_hist(hist, cpu_ref_hist, 256);
         if(diff_hist == 0){
-            cout << "Histogram time GPU:" << msecTotal2 << "ms" << " for histnumber " << AmountOfHists << endl;
+            cout << "Histogram time GPU:" << msecTotal << "ms" << endl;
         }
 
         cudaFree(histGPU);
@@ -205,14 +191,78 @@ int main()
         }
     }
     //cout << "min " << min << " max " << max << endl;
-    cudaMalloc((void**)&GPU_contrast, width*height*sizeof(unsigned char));
-    ContrastEnhancement<<<grdDim,blkDim>>>(d_dst,GPU_contrast,width,height,min,max);
+    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(8, 0, 0, 0, cudaChannelFormatKindUnsigned);
+    cudaArray* testarray;
 
-    cudaMemcpy(h_contrast,GPU_contrast, width*height, cudaMemcpyDeviceToHost);
-    cout << +h_contrast[(height-1)*width]<< " " << +h_contrast[(height-1)*width+1] << " " << +h_contrast[(height-2)*width] << " "  << +h_contrast[(height-2)*width+1] << endl;
-    cudaMalloc(&GPU_smoothing, width*height*sizeof(unsigned char));
-    Smoothing<<<grdDim,blkDim>>>(GPU_contrast,d_dst, width, height);
-    //cout << "Managed" << endl;
+     cudaMallocArray(&testarray, &channelDesc, width, height);
+     cudaError_t error1 =cudaMemcpyToArray(testarray, 0, 0, h_dst, width*height, cudaMemcpyHostToDevice);
+    texRef.addressMode[0] = cudaAddressModeWrap;
+    texRef.addressMode[1] = cudaAddressModeWrap;
+    cudaError_t error2 = cudaBindTextureToArray(texRef, testarray, channelDesc);
+
+    //cudaError_t error2 = cudaBindSurfaceToArray(surftest, testarray, channelDesc);
+    if (error1 != cudaSuccess){
+        cout << "Error 1" << endl;
+        if(error1 == cudaErrorInvalidValue){
+            cout<< "Invalid value" << endl;
+        }
+        if(error1 == cudaErrorInvalidSurface){
+            cout<< "Invalid surface" << endl;
+        }
+
+    }
+    if (error2 != cudaSuccess){
+        cout << "Error 2" << endl;
+        if(error2 == cudaErrorInvalidValue){
+            cout<< "Invalid value" << endl;
+        }
+        if(error2 == cudaErrorInvalidSurface){
+            cout<< "Invalid surface" << endl;
+        }
+
+    }
+    
+    cudaEventCreate(&start);
+    cudaEventRecord(start, NULL); 
+    cudaError_t error3 = cudaMalloc((void**)&GPU_contrast, width*height*sizeof(unsigned char));
+
+    if (error3 != cudaSuccess){
+        cout << "Error 3" << endl;
+        if(error3 == cudaErrorInvalidValue){
+            cout<< "Invalid value" << endl;
+        }
+        if(error3 == cudaErrorInvalidSurface){
+            cout<< "Invalid surface" << endl;
+        }
+
+    }
+
+
+    dim3 grdBlkCon (128, 1,1);
+    dim3 grdDimCon (ceil(size2/128),1,1);
+    ContrastEnhancement<<<grdDimCon,grdBlkCon>>>(d_dst,GPU_contrast,width,height,min,max);
+    if ( cudaSuccess != cudaGetLastError() )
+    cout << "Error!\n";
+    /*if(error1 != cudaSuccess){
+        cout << "Error 1" << endl;
+    }*/
+    cudaEventCreate(&stop);
+    cudaEventRecord(stop, NULL);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&msecTotal2, start, stop);
+    cout << "Contrast enhancement time GPU:" << msecTotal2 << "ms" << endl;
+
+
+    cudaEventCreate(&start);
+    cudaEventRecord(start, NULL); 
+
+    //cout << +h_contrast[(height-1)*width]<< " " << +h_contrast[(height-1)*width+1] << " " << +h_contrast[(height-2)*width] << " "  << +h_contrast[(height-2)*width+1] << endl;
+    cudaMalloc(&d_dst_2, (width*height)*sizeof(unsigned char));
+
+    dim3 blkDimSmth (BLOCKSIZE2, BLOCKSIZE2, 1);
+    dim3 grdDimSmth ((width + BLOCKSIZE2-1)/BLOCKSIZE2, (height + BLOCKSIZE2-1)/BLOCKSIZE2, 1);
+
+    Smoothing<<<grdDimSmth,blkDimSmth>>>(GPU_contrast,d_dst_2, width, height);
     
     // add other three kernels here
     // clock starts -> copy data to gpu -> kernel1 -> kernel2->kernel3->kernel 4 ->copy result to cpu -> clock stops
@@ -223,22 +273,81 @@ int main()
     
     //copy back the result to CPU
     //cudaMemcpy(h_dst, d_dst, width*height, cudaMemcpyDeviceToHost);
-
+    unsigned char* temp5 = new unsigned char [width*height];
+    
+    cudaMemcpy(temp5, d_dst_2, width*height*sizeof(unsigned char), cudaMemcpyDeviceToHost);
+    std::cout << "correct: " << +temp5[12132] << " " << +temp5[120] << " " << +temp5[8294400/2] << " " << +temp5[8294400/2+1] << endl;
     cudaEventCreate(&stop);
     cudaEventRecord(stop, NULL);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&msecTotal, start, stop);
-    //float gpu_time = msecTotal;
-    
+    cout << "Time of original smoothing function: " << msecTotal << endl;
 
+    //////////////////////////////////////////////////////////////////////
+    cudaEventCreate(&start);
+    cudaEventRecord(start, NULL); 
+
+    //cout << +h_contrast[(height-1)*width]<< " " << +h_contrast[(height-1)*width+1] << " " << +h_contrast[(height-2)*width] << " "  << +h_contrast[(height-2)*width+1] << endl;
+    error3= cudaMalloc(&GPU_smoothing2, width*height*sizeof(unsigned char));
+    if (error3 != cudaSuccess){
+        cout << "Error 3" << endl;
+        if(error3 == cudaErrorInvalidValue){
+            cout<< "Invalid value" << endl;
+        }
+        if(error3 == cudaErrorInvalidSurface){
+            cout<< "Invalid surface" << endl;
+        }
+
+    }
+    //cudaMemset(GPU_smoothing, 0, (width+2)*(height+2)*sizeof(unsigned float));
+
+
+    Smoothing_new<<<grdDimSmth,blkDimSmth>>>(GPU_contrast,GPU_smoothing2, width, height);
+    if ( cudaSuccess != cudaGetLastError() )
+    cout << "Error!\n";
+    //wait until kernel finishes
+    cudaDeviceSynchronize();
+
+    unsigned char* temp2 = new unsigned char[width*height];
     
-    int res = compute_diff(cpu_ref,h_dst,width*height);
+    error3 = cudaMemcpy(temp2, GPU_smoothing2, width*height*sizeof(unsigned char), cudaMemcpyDeviceToHost);
+    if (error3 != cudaSuccess){
+        cout << "Error 3" << endl;
+        if(error3 == cudaErrorInvalidValue){
+            cout<< "Invalid value" << endl;
+        }
+        if(error3 == cudaErrorInvalidSurface){
+            cout<< "Invalid surface" << endl;
+        }
+
+    }
+
+    cout << "new: " << +temp2[1] << " " << +temp2[0] <<" " << +temp2[8294400/2] << " " << +temp2[8294400/2+1] << endl;
+    cudaEventCreate(&stop);
+    cudaEventRecord(stop, NULL);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&msecTotal, start, stop);
+    cout << "Time of optimised smoothing function: " << msecTotal << endl;
+    
+cout << "size " << size2 << endl;
+int i=0;
+    while(i < size2){
+        if(temp2[i] != 0){
+            cout << i << " integer " << +temp2[i] << endl;
+            break;
+        }
+        i++;
+    }
+    int res = compute_diff(temp2,temp5,width*height);
+    cout << res << " diff " << endl;
 
     cudaFree(GPU_contrast);
     cudaFree(GPU_smoothing);
+    cudaFree(GPU_smoothing2);
     //cudaFree(histGPU);
     cudaFree(d_src);
 
+    cudaFreeArray(testarray);
 
     cudaFree(d_src);
     cudaFree(d_dst);
