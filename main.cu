@@ -190,38 +190,7 @@ int main()
             break;
         }
     }
-    //cout << "min " << min << " max " << max << endl;
-    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(8, 0, 0, 0, cudaChannelFormatKindUnsigned);
-    cudaArray* testarray;
-
-     cudaMallocArray(&testarray, &channelDesc, width, height);
-     cudaError_t error1 =cudaMemcpyToArray(testarray, 0, 0, h_dst, width*height, cudaMemcpyHostToDevice);
-    texRef.addressMode[0] = cudaAddressModeWrap;
-    texRef.addressMode[1] = cudaAddressModeWrap;
-    cudaError_t error2 = cudaBindTextureToArray(texRef, testarray, channelDesc);
-
-    //cudaError_t error2 = cudaBindSurfaceToArray(surftest, testarray, channelDesc);
-    if (error1 != cudaSuccess){
-        cout << "Error 1" << endl;
-        if(error1 == cudaErrorInvalidValue){
-            cout<< "Invalid value" << endl;
-        }
-        if(error1 == cudaErrorInvalidSurface){
-            cout<< "Invalid surface" << endl;
-        }
-
-    }
-    if (error2 != cudaSuccess){
-        cout << "Error 2" << endl;
-        if(error2 == cudaErrorInvalidValue){
-            cout<< "Invalid value" << endl;
-        }
-        if(error2 == cudaErrorInvalidSurface){
-            cout<< "Invalid surface" << endl;
-        }
-
-    }
-    
+   
     cudaEventCreate(&start);
     cudaEventRecord(start, NULL); 
     cudaError_t error3 = cudaMalloc((void**)&GPU_contrast, width*height*sizeof(unsigned char));
@@ -237,15 +206,10 @@ int main()
 
     }
 
-
     dim3 grdBlkCon (128, 1,1);
     dim3 grdDimCon (ceil(size2/128),1,1);
     ContrastEnhancement<<<grdDimCon,grdBlkCon>>>(d_dst,GPU_contrast,width,height,min,max);
-    if ( cudaSuccess != cudaGetLastError() )
-    cout << "Error!\n";
-    /*if(error1 != cudaSuccess){
-        cout << "Error 1" << endl;
-    }*/
+
     cudaEventCreate(&stop);
     cudaEventRecord(stop, NULL);
     cudaEventSynchronize(stop);
@@ -253,15 +217,18 @@ int main()
     cout << "Contrast enhancement time GPU:" << msecTotal2 << "ms" << endl;
 
 
-    cudaEventCreate(&start);
-    cudaEventRecord(start, NULL); 
+
+
+
 
     //cout << +h_contrast[(height-1)*width]<< " " << +h_contrast[(height-1)*width+1] << " " << +h_contrast[(height-2)*width] << " "  << +h_contrast[(height-2)*width+1] << endl;
-    cudaMalloc(&d_dst_2, (width*height)*sizeof(unsigned char));
+   /* cudaMalloc(&d_dst_2, (width*height)*sizeof(unsigned char));
 
-    dim3 blkDimSmth (BLOCKSIZE2, BLOCKSIZE2, 1);
-    dim3 grdDimSmth ((width + BLOCKSIZE2-1)/BLOCKSIZE2, (height + BLOCKSIZE2-1)/BLOCKSIZE2, 1);
-
+    dim3 blkDimSmth (16, 16, 1);
+    dim3 grdDimSmth ((width + 16-1)/BLOCKSIZE2, (height + BLOCKSIZE2-1)/BLOCKSIZE2, 1);
+    cudaDeviceSynchronize();
+    cudaEventCreate(&start);
+    cudaEventRecord(start, NULL); 
     Smoothing<<<grdDimSmth,blkDimSmth>>>(GPU_contrast,d_dst_2, width, height);
     
     // add other three kernels here
@@ -269,6 +236,10 @@ int main()
 
     //wait until kernel finishes
     cudaDeviceSynchronize();
+    cudaEventCreate(&stop);
+    cudaEventRecord(stop, NULL);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&msecTotal, start, stop);
     //cudaMemcpy(h_dst, d_dst, width*height, cudaMemcpyDeviceToHost);
     
     //copy back the result to CPU
@@ -277,59 +248,54 @@ int main()
     
     cudaMemcpy(temp5, d_dst_2, width*height*sizeof(unsigned char), cudaMemcpyDeviceToHost);
     std::cout << "correct: " << +temp5[12132] << " " << +temp5[120] << " " << +temp5[8294400/2] << " " << +temp5[8294400/2+1] << endl;
-    cudaEventCreate(&stop);
-    cudaEventRecord(stop, NULL);
-    cudaEventSynchronize(stop);
-    cudaEventElapsedTime(&msecTotal, start, stop);
+*/
     cout << "Time of original smoothing function: " << msecTotal << endl;
+    cudaMalloc(&GPU_smoothing2, width*height*sizeof(unsigned char));
 
-    //////////////////////////////////////////////////////////////////////
-    cudaEventCreate(&start);
-    cudaEventRecord(start, NULL); 
+
+
 
     //cout << +h_contrast[(height-1)*width]<< " " << +h_contrast[(height-1)*width+1] << " " << +h_contrast[(height-2)*width] << " "  << +h_contrast[(height-2)*width+1] << endl;
-    error3= cudaMalloc(&GPU_smoothing2, width*height*sizeof(unsigned char));
-    if (error3 != cudaSuccess){
-        cout << "Error 3" << endl;
-        if(error3 == cudaErrorInvalidValue){
-            cout<< "Invalid value" << endl;
-        }
-        if(error3 == cudaErrorInvalidSurface){
-            cout<< "Invalid surface" << endl;
-        }
 
-    }
-    //cudaMemset(GPU_smoothing, 0, (width+2)*(height+2)*sizeof(unsigned float));
-
-
-    Smoothing_new<<<grdDimSmth,blkDimSmth>>>(GPU_contrast,GPU_smoothing2, width, height);
-    if ( cudaSuccess != cudaGetLastError() )
-    cout << "Error!\n";
-    //wait until kernel finishes
+    int xthreads = 16;
+    int ythreads = 16;
     cudaDeviceSynchronize();
-
-    unsigned char* temp2 = new unsigned char[width*height];
-    
-    error3 = cudaMemcpy(temp2, GPU_smoothing2, width*height*sizeof(unsigned char), cudaMemcpyDeviceToHost);
-    if (error3 != cudaSuccess){
-        cout << "Error 3" << endl;
-        if(error3 == cudaErrorInvalidValue){
-            cout<< "Invalid value" << endl;
-        }
-        if(error3 == cudaErrorInvalidSurface){
-            cout<< "Invalid surface" << endl;
-        }
-
-    }
-
-    cout << "new: " << +temp2[1] << " " << +temp2[0] <<" " << +temp2[8294400/2] << " " << +temp2[8294400/2+1] << endl;
+    dim3 blkDimSmthnew (xthreads, ythreads, 1);
+    dim3 grdDimSmthnew (ceil(width/(xthreads-2)), ceil(height/(ythreads-2)), 1);
+    //int maxdim = (xthreads+2)*(ythreads+2);
+    cudaEventCreate(&start);
+    cudaEventRecord(start, NULL); 
+    Smoothing_new<<<grdDimSmthnew,blkDimSmthnew>>>(GPU_contrast,GPU_smoothing2, width, height, xthreads, ythreads);
+    cudaDeviceSynchronize();
     cudaEventCreate(&stop);
     cudaEventRecord(stop, NULL);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&msecTotal, start, stop);
     cout << "Time of optimised smoothing function: " << msecTotal << endl;
+
+    if ( cudaSuccess != cudaGetLastError() )
+    cout << "Error!\n";
+    //wait until kernel finishes
+
+
+    unsigned char* temp2 = new unsigned char[width*height];
     
-cout << "size " << size2 << endl;
+    error3 = cudaMemcpy(h_dst, GPU_smoothing2, width*height*sizeof(unsigned char), cudaMemcpyDeviceToHost);
+    if (error3 != cudaSuccess){
+        cout << "Error 3" << endl;
+        if(error3 == cudaErrorInvalidValue){
+            cout<< "Invalid value" << endl;
+        }
+        if(error3 == cudaErrorInvalidSurface){
+            cout<< "Invalid surface" << endl;
+        }
+
+    }
+
+    //cout << "new: " << +temp2[1] << " " << +temp2[0] <<" " << +temp2[8294400/2] << " " << +temp2[8294400/2+1] << endl;
+
+    
+/*cout << "size " << size2 << endl;
 int i=0;
     while(i < size2){
         if(temp2[i] != 0){
@@ -337,9 +303,11 @@ int i=0;
             break;
         }
         i++;
-    }
-    int res = compute_diff(temp2,temp5,width*height);
-    cout << res << " diff " << endl;
+    }*/
+    //int res = compute_diff(h_dst,temp5,width*height);
+    
+  //  cout << res << " diff " << endl;
+
 
     cudaFree(GPU_contrast);
     cudaFree(GPU_smoothing);
@@ -347,13 +315,12 @@ int i=0;
     //cudaFree(histGPU);
     cudaFree(d_src);
 
-    cudaFreeArray(testarray);
 
     cudaFree(d_src);
     cudaFree(d_dst);
 
     cudaDeviceReset();
-    std::cout << "diff cpu and gpu " << res <<std::endl; // do not change this
+   // std::cout << "diff cpu and gpu " << res <<std::endl; // do not change this
     //std::cout <<"CPU processing time: " << gpu_time << " ms" <<std::endl; // do not change this
     //you need to save your final output, we need to measure the correctness of your program
     //read test.cpp to learn how to save a image
